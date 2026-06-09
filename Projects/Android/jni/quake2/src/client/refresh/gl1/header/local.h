@@ -91,6 +91,7 @@ enum stereo_modes {
 	STEREO_MODE_PIXEL_INTERLEAVED,
 	STEREO_SPLIT_HORIZONTAL,
 	STEREO_SPLIT_VERTICAL,
+	STEREO_OPENXR,
 };
 
 enum opengl_special_buffer_modes {

@@ -141,6 +141,10 @@ cvar_t *gl1_stereo;
 cvar_t *gl1_stereo_separation;
 cvar_t *gl1_stereo_anaglyph_colors;
 cvar_t *gl1_stereo_convergence;
+cvar_t *gl1_openxr_fov_left[2];
+cvar_t *gl1_openxr_fov_right[2];
+cvar_t *gl1_openxr_fov_up[2];
+cvar_t *gl1_openxr_fov_down[2];
 
 
 refimport_t ri;
@@ -761,6 +765,21 @@ R_MYgluPerspective(GLdouble fovy, GLdouble aspect,
 {
 	GLdouble xmin, xmax, ymin, ymax;
 
+	if (gl_state.stereo_mode == STEREO_OPENXR && gl_state.camera_separation != 0)
+	{
+		const int eye = gl_state.camera_separation < 0 ? 0 : 1;
+		if (gl1_openxr_fov_left[eye] && gl1_openxr_fov_right[eye] &&
+			gl1_openxr_fov_up[eye] && gl1_openxr_fov_down[eye])
+		{
+			xmin = gl1_openxr_fov_left[eye]->value * zNear;
+			xmax = gl1_openxr_fov_right[eye]->value * zNear;
+			ymin = gl1_openxr_fov_down[eye]->value * zNear;
+			ymax = gl1_openxr_fov_up[eye]->value * zNear;
+			glFrustumf(xmin, xmax, ymin, ymax, zNear, zFar);
+			return;
+		}
+	}
+
 	ymax = zNear * tan(fovy * M_PI / 360.0);
 	ymin = -ymax;
 
@@ -790,8 +809,9 @@ R_SetupGL(void)
 	h = y - y2;
 
 	qboolean drawing_left_eye = gl_state.camera_separation < 0;
-	qboolean stereo_split_tb = ((gl_state.stereo_mode == STEREO_SPLIT_VERTICAL) && gl_state.camera_separation);
-	qboolean stereo_split_lr = ((gl_state.stereo_mode == STEREO_SPLIT_HORIZONTAL) && gl_state.camera_separation);
+	qboolean openxr_per_eye_buffer = gl_state.stereo_mode == STEREO_OPENXR;
+	qboolean stereo_split_tb = !openxr_per_eye_buffer && ((gl_state.stereo_mode == STEREO_SPLIT_VERTICAL) && gl_state.camera_separation);
+	qboolean stereo_split_lr = !openxr_per_eye_buffer && ((gl_state.stereo_mode == STEREO_SPLIT_HORIZONTAL) && gl_state.camera_separation);
 
 	if(stereo_split_lr) {
 		w = w / 2;
@@ -1154,6 +1174,7 @@ GL_GetSpecialBufferModeForStereoMode(enum stereo_modes stereo_mode) {
 		case STEREO_MODE_NONE:
 		case STEREO_SPLIT_HORIZONTAL:
 		case STEREO_SPLIT_VERTICAL:
+		case STEREO_OPENXR:
 		case STEREO_MODE_ANAGLYPH:
 			return OPENGL_SPECIAL_BUFFER_MODE_NONE;
 		case STEREO_MODE_OPENGL:
@@ -1288,6 +1309,14 @@ R_Register(void)
 	gl1_stereo_separation = ri.Cvar_Get( "gl1_stereo_separation", "-0.4", CVAR_ARCHIVE );
 	gl1_stereo_anaglyph_colors = ri.Cvar_Get( "gl1_stereo_anaglyph_colors", "rc", CVAR_ARCHIVE );
 	gl1_stereo_convergence = ri.Cvar_Get( "gl1_stereo_convergence", "1", CVAR_ARCHIVE );
+	gl1_openxr_fov_left[0] = ri.Cvar_Get("gl1_openxr_fov_left_0", "-1", 0);
+	gl1_openxr_fov_right[0] = ri.Cvar_Get("gl1_openxr_fov_right_0", "1", 0);
+	gl1_openxr_fov_up[0] = ri.Cvar_Get("gl1_openxr_fov_up_0", "1", 0);
+	gl1_openxr_fov_down[0] = ri.Cvar_Get("gl1_openxr_fov_down_0", "-1", 0);
+	gl1_openxr_fov_left[1] = ri.Cvar_Get("gl1_openxr_fov_left_1", "-1", 0);
+	gl1_openxr_fov_right[1] = ri.Cvar_Get("gl1_openxr_fov_right_1", "1", 0);
+	gl1_openxr_fov_up[1] = ri.Cvar_Get("gl1_openxr_fov_up_1", "1", 0);
+	gl1_openxr_fov_down[1] = ri.Cvar_Get("gl1_openxr_fov_down_1", "-1", 0);
 
 	ri.Cmd_AddCommand("imagelist", R_ImageList_f);
 	ri.Cmd_AddCommand("screenshot", R_ScreenShot);

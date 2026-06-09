@@ -57,10 +57,14 @@ GNU General Public License for more details.
 
 #define RAD_TO_STUDIO	(32768.0 / M_PI)
 #define STUDIO_TO_RAD	(M_PI / 32768.0)
+#ifndef nanmask
 #define nanmask		(255<<23)
+#endif
 
 #define Q_rint(x)		((x) < 0 ? ((int)((x)-0.5f)) : ((int)((x)+0.5f)))
+#ifndef IS_NAN
 #define IS_NAN(x)		(((*(int *)&x)&nanmask)==nanmask)
+#endif
 
 #define VectorIsNAN(v) (IS_NAN(v[0]) || IS_NAN(v[1]) || IS_NAN(v[2]))	
 //#define DotProduct(x,y) ((x)[0]*(y)[0]+(x)[1]*(y)[1]+(x)[2]*(y)[2])

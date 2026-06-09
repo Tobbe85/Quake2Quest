@@ -74,4 +74,3 @@ LOCAL_SHARED_LIBRARIES := SDL2 SDL2_mixer
 include $(BUILD_SHARED_LIBRARY)
 
 
-$(call import-module,VrApi/Projects/AndroidPrebuilt/jni)

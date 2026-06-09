@@ -15,6 +15,7 @@ import java.nio.ByteBuffer;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 
@@ -23,8 +24,12 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.MediaRecorder;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -41,14 +46,16 @@ import static android.system.Os.setenv;
 	// Load the gles3jni library right away to make sure JNI_OnLoad() gets called as the very first thing.
 	static
 	{
+		System.loadLibrary( "openxr_loader" );
 		System.loadLibrary( "yquake2" );
 	}
 
 	private static final String TAG = "Quake2Quest";
 
-	private int permissionCount = 0;
+	private boolean permissionsGranted = false;
 	private static final int READ_EXTERNAL_STORAGE_PERMISSION_ID = 1;
 	private static final int WRITE_EXTERNAL_STORAGE_PERMISSION_ID = 2;
+	private static final int MANAGE_EXTERNAL_STORAGE_PERMISSION_ID = 3;
 
 	String commandLineParams;
 
@@ -101,33 +108,39 @@ import static android.system.Os.setenv;
 
 	/** Initializes the Activity only if the permission has been granted. */
 	private void checkPermissionsAndInitialize() {
-		// Boilerplate for checking runtime permissions in Android.
-		if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+		if (mNativeHandle != 0) {
+			return;
+		}
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+			try {
+				Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+				intent.setData(Uri.parse("package:" + getPackageName()));
+				startActivityForResult(intent, MANAGE_EXTERNAL_STORAGE_PERMISSION_ID);
+			} catch (Exception e) {
+				startActivityForResult(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+						MANAGE_EXTERNAL_STORAGE_PERMISSION_ID);
+			}
+		} else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+				ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
 				!= PackageManager.PERMISSION_GRANTED){
 			ActivityCompat.requestPermissions(
 					GLES3JNIActivity.this,
 					new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE},
 					WRITE_EXTERNAL_STORAGE_PERMISSION_ID);
-		}
-		else
-		{
-			permissionCount++;
-		}
-
-		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+		} else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+				ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
 				!= PackageManager.PERMISSION_GRANTED)
 		{
 			ActivityCompat.requestPermissions(
 					GLES3JNIActivity.this,
 					new String[] {Manifest.permission.READ_EXTERNAL_STORAGE},
 					READ_EXTERNAL_STORAGE_PERMISSION_ID);
-		}
-		else
-		{
-			permissionCount++;
+		} else {
+			permissionsGranted = true;
 		}
 
-		if (permissionCount == 2) {
+		if (permissionsGranted) {
 			// Permissions have already been granted.
 			create();
 		}
@@ -137,26 +150,28 @@ import static android.system.Os.setenv;
 	@Override
 	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
 		if (requestCode == READ_EXTERNAL_STORAGE_PERMISSION_ID) {
-			if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-				permissionCount++;
-			}
-			else
+			if (results.length > 0 && results[0] != PackageManager.PERMISSION_GRANTED)
 			{
 				System.exit(0);
 			}
 		}
 
 		if (requestCode == WRITE_EXTERNAL_STORAGE_PERMISSION_ID) {
-			if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
-				permissionCount++;
-			}
-			else
+			if (results.length > 0 && results[0] != PackageManager.PERMISSION_GRANTED)
 			{
 				System.exit(0);
 			}
 		}
 
 		checkPermissionsAndInitialize();
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode == MANAGE_EXTERNAL_STORAGE_PERMISSION_ID) {
+			checkPermissionsAndInitialize();
+		}
 	}
 
 	public void create()
@@ -281,7 +296,10 @@ import static android.system.Os.setenv;
 		Log.v( TAG, "GLES3JNIActivity::onStart()" );
 		super.onStart();
 
-		GLES3JNILib.onStart( mNativeHandle );
+		if ( mNativeHandle != 0 )
+		{
+			GLES3JNILib.onStart( mNativeHandle );
+		}
 	}
 
 	@Override protected void onResume()
@@ -289,20 +307,29 @@ import static android.system.Os.setenv;
 		Log.v( TAG, "GLES3JNIActivity::onResume()" );
 		super.onResume();
 
-		GLES3JNILib.onResume( mNativeHandle );
+		if ( mNativeHandle != 0 )
+		{
+			GLES3JNILib.onResume( mNativeHandle );
+		}
 	}
 
 	@Override protected void onPause()
 	{
 		Log.v( TAG, "GLES3JNIActivity::onPause()" );
-		GLES3JNILib.onPause( mNativeHandle );
+		if ( mNativeHandle != 0 )
+		{
+			GLES3JNILib.onPause( mNativeHandle );
+		}
 		super.onPause();
 	}
 
 	@Override protected void onStop()
 	{
 		Log.v( TAG, "GLES3JNIActivity::onStop()" );
-		GLES3JNILib.onStop( mNativeHandle );
+		if ( mNativeHandle != 0 )
+		{
+			GLES3JNILib.onStop( mNativeHandle );
+		}
 		super.onStop();
 	}
 
@@ -310,12 +337,15 @@ import static android.system.Os.setenv;
 	{
 		Log.v( TAG, "GLES3JNIActivity::onDestroy()" );
 
-		if ( mSurfaceHolder != null )
+		if ( mSurfaceHolder != null && mNativeHandle != 0 )
 		{
 			GLES3JNILib.onSurfaceDestroyed( mNativeHandle );
 		}
 
-		GLES3JNILib.onDestroy( mNativeHandle );
+		if ( mNativeHandle != 0 )
+		{
+			GLES3JNILib.onDestroy( mNativeHandle );
+		}
 
 		super.onDestroy();
 		// Reset everything in case the user re opens the app

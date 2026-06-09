@@ -11,7 +11,10 @@ BASE_DIR := engine
 
 LOCAL_C_INCLUDES :=     $(SDL_INCLUDE_PATHS)  \
                         $(TOP_DIR) \
+                        $(TOP_DIR)/Quake2VR \
                         $(SUPPORT_LIBS)/jpeg8d \
+                        $(OPENXR_SDK)/include \
+                        $(OPENXR_SDK)/src/common \
                         $(GL4ES_PATH)
 
 # ----------

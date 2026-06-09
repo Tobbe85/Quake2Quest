@@ -4,11 +4,14 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := yquake2
 
-LOCAL_CFLAGS :=  -DIOAPI_NO_64 -DUSE_GLES1 -DUSE_OPENAL -DYQUAKE2 -DENGINE_NAME=\"yquake2\" -DYQ2OSTYPE=\"Linux\" -DYQ2ARCH=\"Arm\"
+LOCAL_CFLAGS :=  -DIOAPI_NO_64 -DUSE_GLES1 -DUSE_OPENAL -DYQUAKE2 -DXR_USE_PLATFORM_ANDROID -DXR_USE_GRAPHICS_API_OPENGL_ES -DENGINE_NAME=\"yquake2\" -DYQ2OSTYPE=\"Linux\" -DYQ2ARCH=\"Arm\"
 
 
 LOCAL_C_INCLUDES :=     $(SUPPORT_LIBS)/openal/include/ \
-                        $(GL4ES_PATH) 
+                        $(GL4ES_PATH) \
+                        $(TOP_DIR)/Quake2VR \
+                        $(OPENXR_SDK)/include \
+                        $(OPENXR_SDK)/src/common
 
 
 # Used by the client
@@ -94,7 +97,6 @@ endif
 
 LOCAL_SRC_FILES :=  $(CLIENT_OBJS_:.o=.c) \
 	   ../Quake2VR/Q2VR_SurfaceView.c \
-       ../Quake2VR/VrCompositor.c \
        ../Quake2VR/VrInputCommon.c \
        ../Quake2VR/VrInputDefault.c \
        ../Quake2VR/mathlib.c \
@@ -104,11 +106,8 @@ LOCAL_SRC_FILES :=  $(CLIENT_OBJS_:.o=.c) \
 
 LOCAL_LDLIBS :=  -lEGL -ldl -llog -landroid -lOpenSLES -lz
 LOCAL_STATIC_LIBRARIES := sigc libzip libpng libjpeg
-LOCAL_SHARED_LIBRARIES := gl4es openal vrapi
+LOCAL_SHARED_LIBRARIES := gl4es openal openxr_loader
 LOCAL_LDLIBS += -lGLESv3
 
 include $(BUILD_SHARED_LIBRARY)
-
-
-$(call import-module,VrApi/Projects/AndroidPrebuilt/jni)
 

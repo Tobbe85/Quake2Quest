@@ -851,9 +851,9 @@ CL_CalcViewValues(void)
 	ops = &oldframe->playerstate;
 
 	/* see if the player entity was teleported this frame */
-	if ((abs(ops->pmove.origin[0] - ps->pmove.origin[0]) > 256 * 8) ||
-		(abs(ops->pmove.origin[1] - ps->pmove.origin[1]) > 256 * 8) ||
-		(abs(ops->pmove.origin[2] - ps->pmove.origin[2]) > 256 * 8))
+	if ((fabsf(ops->pmove.origin[0] - ps->pmove.origin[0]) > 256 * 8) ||
+		(fabsf(ops->pmove.origin[1] - ps->pmove.origin[1]) > 256 * 8) ||
+		(fabsf(ops->pmove.origin[2] - ps->pmove.origin[2]) > 256 * 8))
 	{
 		ops = ps; /* don't interpolate */
 	}

@@ -4,7 +4,8 @@
 ROOT_DIR := $(dir $(lastword $(MAKEFILE_LIST)))../../../../..
 NDK_MODULE_PATH := $(ROOT_DIR)
 
-APP_PLATFORM := android-19
+APP_ABI      := arm64-v8a
+APP_PLATFORM := android-29
 
 APP_CFLAGS += -Wl,--no-undefined
 
@@ -13,10 +14,11 @@ APPLICATIONMK_PATH = $(call my-dir)
 TOP_DIR			:= $(APPLICATIONMK_PATH)
 SUPPORT_LIBS	:= $(APPLICATIONMK_PATH)/SupportLibs
 GL4ES_PATH		:= $(SUPPORT_LIBS)/gl4es
+OPENXR_SDK		:= $(APPLICATIONMK_PATH)/OpenXR-SDK
 
 APP_ALLOW_MISSING_DEPS=true
 
-APP_MODULES := yquake2 yquake2_game gl4es yquake2_gl1
+APP_MODULES := yquake2 yquake2_game gl4es yquake2_gl1 openxr_loader
 APP_STL := c++_shared
 
 

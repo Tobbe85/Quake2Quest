@@ -25,7 +25,7 @@
  */
 
 #include "header/local.h"
-#include "../../../../../../../../../../VrApi/Include/VrApi_Types.h"
+#include "VrCommon.h"
 
 image_t gltextures[MAX_GLTEXTURES];
 int numgltextures;
@@ -1332,7 +1332,7 @@ R_InitImages(int hmdType)
 	}
  */
 
-	float intensity = (hmdType == VRAPI_DEVICE_TYPE_OCULUSQUEST2) ? 3.7 : 2.5;
+	float intensity = (hmdType == XR_DEVICE_TYPE_META) ? 3.7 : 2.5;
 
 	gl_state.inverse_intensity = 1 / intensity;
 

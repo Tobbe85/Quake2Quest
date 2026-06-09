@@ -7,12 +7,6 @@ Authors		:	Simon Brown
 
 *************************************************************************************/
 
-#include <VrApi.h>
-#include <VrApi_Helpers.h>
-#include <VrApi_SystemUtils.h>
-#include <VrApi_Input.h>
-#include <VrApi_Types.h>
-
 #include "VrInput.h"
 #include "VrCvars.h"
 
@@ -230,7 +224,7 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
                     static int totalIcons;
                     static int t_rel_t;
                     static vec3_t initialAngles;
-                    static wheel_icon_t *iconList;
+                    static const wheel_icon_t *iconList;
                     ovrTracking *activeController;
                     vec3_t currentAngles;
                     vec2_t relativeAngles;
@@ -259,7 +253,8 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
                                     "inven"); // send the "inven" command to force cl.inventory to be populated
                             QuatToYawPitchRoll(activeController->HeadPose.Pose.Orientation, 0.0f,
                                                initialAngles);
-                            VectorCopy(initialAngles, relativeAngles);
+                            relativeAngles[0] = initialAngles[0];
+                            relativeAngles[1] = initialAngles[1];
                             touching = true;
                         } else {
                             QuatToYawPitchRoll(activeController->HeadPose.Pose.Orientation, 0.0f,
@@ -300,7 +295,7 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
                             t_rel_t = Sys_Milliseconds();
                             if (polarCursor[0] > 8) {
                                 char useCom[50];
-                                sprintf(useCom, "use %s", iconList[segment].command);
+                                snprintf(useCom, sizeof(useCom), "use %s", iconList[segment].command);
                                 sendButtonActionSimple(useCom);
                             }
                         }
@@ -344,7 +339,7 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
         {
             //This section corrects for the fact that the controller actually controls direction of movement, but we want to move relative to the direction the
             //player is facing for positional tracking
-            float positionalFactor = (hmdType == VRAPI_DEVICE_TYPE_OCULUSQUEST2)  ? 2500 : 2000;
+            float positionalFactor = (hmdType == XR_DEVICE_TYPE_META)  ? 2500 : 2000;
             float multiplier = positionalFactor / (cl_forwardspeed->value *
 					((pOffTrackedRemoteNew->Buttons & ovrButton_Trigger) ? 1.5f : 1.0f));
 
@@ -353,10 +348,6 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
                               positionDeltaThisFrame[2] * multiplier, /*cl.refdef.viewangles[YAW]*/ - hmdorientation[YAW], v);
             positional_movementSideways = v[0];
             positional_movementForward = v[1];
-
-            ALOGV("        positional_movementSideways: %f, positional_movementForward: %f",
-                  positional_movementSideways,
-                  positional_movementForward);
 
             //Jump (B Button)
             handleTrackedControllerButton(primaryButtonsNew,
@@ -458,9 +449,6 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
 
             remote_movementSideways = v[0];
             remote_movementForward = v[1];
-            ALOGV("        remote_movementSideways: %f, remote_movementForward: %f",
-                  remote_movementSideways,
-                  remote_movementForward);
 
 
             //show help computer while X/A pressed

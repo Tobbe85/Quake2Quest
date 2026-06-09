@@ -50,6 +50,52 @@ Inv_DrawStringScaled(int x, int y, char *string, float factor)
 	}
 }
 
+static qboolean
+CL_UsingOpenXRStereo(void)
+{
+	return (int)Cvar_VariableValue("gl1_stereo") == 8;
+}
+
+static int
+CL_GetStereoHudOffset(float separation)
+{
+	if (CL_UsingOpenXRStereo())
+	{
+		int eye = separation < 0 ? 0 : 1;
+		float left = Cvar_VariableValue(eye == 0 ? "gl1_openxr_fov_left_0" : "gl1_openxr_fov_left_1");
+		float right = Cvar_VariableValue(eye == 0 ? "gl1_openxr_fov_right_0" : "gl1_openxr_fov_right_1");
+		float width = (float)viddef.width;
+		float denom = right - left;
+
+		if (fabsf(denom) > 0.0001f)
+		{
+			float hud_depth = Cvar_VariableValue("vr_hud_depth");
+			float hud_ipd = Cvar_VariableValue("vr_hud_ipd");
+			float depth_offset;
+			float optical_center = width * (-left / denom);
+			float offset = optical_center - (width * 0.5f);
+
+			if (hud_depth <= 0.0f)
+			{
+				hud_depth = 0.5f;
+			}
+			if (hud_ipd <= 0.0f)
+			{
+				hud_ipd = 0.064f;
+			}
+
+			depth_offset = ((hud_ipd * 0.5f) / hud_depth) * (width / denom);
+			offset += (eye == 0) ? depth_offset : -depth_offset;
+
+			return (int)(offset + (offset >= 0.0f ? 0.5f : -0.5f));
+		}
+
+		return 0;
+	}
+
+	return (separation > 0) ? -25 : 25;
+}
+
 static void
 SetStringHighBit(char *s)
 {
@@ -78,7 +124,7 @@ CL_DrawInventory(float separation)
 
         selected = cl.frame.playerstate.stats[STAT_SELECTED_ITEM];
 
-        int offset_stereo = (separation > 0) ? -25 : 25;
+        int offset_stereo = CL_GetStereoHudOffset(separation);
         num = 0;
         selected_num = 0;
 

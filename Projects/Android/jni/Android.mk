@@ -1,4 +1,5 @@
 include $(GL4ES_PATH)/Android.mk
+include $(TOP_DIR)/AndroidPrebuilt/jni/Android.mk
 include $(SUPPORT_LIBS)/openal/Android.mk
 include $(SUPPORT_LIBS)/jpeg8d/Android.mk
 include $(SUPPORT_LIBS)/libzip/Android.mk

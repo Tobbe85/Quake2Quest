@@ -4,9 +4,6 @@
 
 #include "VrCommon.h"
 
-//New control scheme definitions to be defined L1VR_SurfaceView.c enumeration
-extern enum control_scheme;
-
 extern ovrInputStateTrackedRemote leftTrackedRemoteState_old;
 extern ovrInputStateTrackedRemote leftTrackedRemoteState_new;
 extern ovrTracking leftRemoteTracking_new;
@@ -29,7 +26,7 @@ extern float snapTurn;
 void sendButtonAction(const char* action, long buttonDown);
 void sendButtonActionSimple(const char* action);
 
-void acquireTrackedRemotesData(const ovrMobile *Ovr, double displayTime);
+void acquireTrackedRemotesData(void);
 
 void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew, ovrInputStateTrackedRemote *pDominantTrackedRemoteOld, ovrTracking* pDominantTracking,
                           ovrInputStateTrackedRemote *pOffTrackedRemoteNew, ovrInputStateTrackedRemote *pOffTrackedRemoteOld, ovrTracking* pOffTracking,
