@@ -53,9 +53,9 @@ import static android.system.Os.setenv;
 	private static final String TAG = "Quake2Quest";
 
 	private boolean permissionsGranted = false;
-	private static final int READ_EXTERNAL_STORAGE_PERMISSION_ID = 1;
 	private static final int WRITE_EXTERNAL_STORAGE_PERMISSION_ID = 2;
-	private static final int MANAGE_EXTERNAL_STORAGE_PERMISSION_ID = 3;
+
+	private int permissionAttempt = 0;
 
 	String commandLineParams;
 
@@ -112,36 +112,16 @@ import static android.system.Os.setenv;
 			return;
 		}
 
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-			try {
-				Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-				intent.setData(Uri.parse("package:" + getPackageName()));
-				startActivityForResult(intent, MANAGE_EXTERNAL_STORAGE_PERMISSION_ID);
-			} catch (Exception e) {
-				startActivityForResult(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
-						MANAGE_EXTERNAL_STORAGE_PERMISSION_ID);
-			}
-		} else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
-				ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-				!= PackageManager.PERMISSION_GRANTED){
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+				!= PackageManager.PERMISSION_GRANTED) {
 			ActivityCompat.requestPermissions(
-					GLES3JNIActivity.this,
-					new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE},
+					this,
+					new String[] {
+							Manifest.permission.READ_EXTERNAL_STORAGE,
+							Manifest.permission.WRITE_EXTERNAL_STORAGE
+					},
 					WRITE_EXTERNAL_STORAGE_PERMISSION_ID);
-		} else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
-				ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-				!= PackageManager.PERMISSION_GRANTED)
-		{
-			ActivityCompat.requestPermissions(
-					GLES3JNIActivity.this,
-					new String[] {Manifest.permission.READ_EXTERNAL_STORAGE},
-					READ_EXTERNAL_STORAGE_PERMISSION_ID);
 		} else {
-			permissionsGranted = true;
-		}
-
-		if (permissionsGranted) {
-			// Permissions have already been granted.
 			create();
 		}
 	}
@@ -149,28 +129,31 @@ import static android.system.Os.setenv;
 	/** Handles the user accepting the permission. */
 	@Override
 	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
-		if (requestCode == READ_EXTERNAL_STORAGE_PERMISSION_ID) {
-			if (results.length > 0 && results[0] != PackageManager.PERMISSION_GRANTED)
-			{
-				System.exit(0);
-			}
-		}
+		super.onRequestPermissionsResult(requestCode, permissions, results);
 
 		if (requestCode == WRITE_EXTERNAL_STORAGE_PERMISSION_ID) {
-			if (results.length > 0 && results[0] != PackageManager.PERMISSION_GRANTED)
-			{
+			permissionAttempt++;
+
+			boolean granted = false;
+			if (results != null) {
+				for (int result : results) {
+					if (result == PackageManager.PERMISSION_GRANTED) {
+						granted = true;
+						break;
+					}
+				}
+			}
+
+			if (granted) {
+				create();
+				return;
+			}
+
+			if (permissionAttempt < 5) {
+				checkPermissionsAndInitialize();
+			} else {
 				System.exit(0);
 			}
-		}
-
-		checkPermissionsAndInitialize();
-	}
-
-	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		super.onActivityResult(requestCode, resultCode, data);
-		if (requestCode == MANAGE_EXTERNAL_STORAGE_PERMISSION_ID) {
-			checkPermissionsAndInitialize();
 		}
 	}
 
