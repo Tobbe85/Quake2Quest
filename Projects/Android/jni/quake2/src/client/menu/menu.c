@@ -61,6 +61,10 @@ static void M_Menu_Options_f(void);
 static void M_Menu_Keys_f(void);
 static void M_Menu_Quit_f(void);
 
+static void UpdateSmoothTurnFunc(void *unused);
+static float ClampCvar(float min, float max, float value);
+static void Options_MenuInit(void);
+
 void M_Menu_Credits(void);
 
 qboolean m_entersound; /* play after drawing a frame, so caching won't disrupt the sound */
@@ -1063,10 +1067,13 @@ static menuslider_s s_options_sfxvolume_slider;
 static menuslider_s s_options_haptic_slider;
 static menulist_s s_options_oggshuffle_box;
 static menuslider_s s_options_oggvolume_slider;
+static menuslider_s s_options_smoothturn_slider;
+static menulist_s s_options_snapturn_angle_box;
 static menulist_s s_options_oggenable_box;
 static menulist_s s_options_quality_list;
 static menulist_s s_options_console_action;
 static menulist_s s_options_enable_item_wheels;
+static menulist_s s_options_enable_smoothturn;
 
 static void
 CrosshairFunc(void *unused)
@@ -1099,9 +1106,39 @@ EnableWheels(void *unused)
 }
 
 static void
+EnableSmoothTurn(void *unused)
+{
+    int old_cursor = s_options_menu.cursor;
+
+    Cvar_SetValue("vr_smoothturn",
+                  (float)s_options_enable_smoothturn.curvalue);
+
+    Options_MenuInit();
+
+    s_options_menu.cursor = old_cursor;
+}
+
+static void
 HeightAdjustFunc(void *unused)
 {
     Cvar_SetValue("vr_height_adjust", (float)(s_options_vr_height_adjust_box.curvalue / 10.0f));
+}
+
+static void
+UpdateSnapTurnAngleFunc(void *unused)
+{
+    static const float values[] = {30, 45, 60, 75, 90};
+
+    Cvar_SetValue("vr_snapturn_angle",
+                  values[s_options_snapturn_angle_box.curvalue]);
+}
+
+static void
+UpdateSmoothTurnFunc(void *unused)
+{
+    float speed = 11.0f - s_options_smoothturn_slider.curvalue;
+
+    Cvar_SetValue("vr_snapturn_angle", speed);
 }
 
 static void
@@ -1142,6 +1179,27 @@ ControlsSetMenuItemValues(void)
     s_options_crosshair_box.curvalue = ClampCvar(0, 3, crosshair->value);
     s_options_haptic_slider.curvalue = Cvar_VariableValue("joy_haptic_magnitude") * 10.0F;
     s_options_enable_item_wheels.curvalue = (int)vr_use_wheels->value;
+    s_options_enable_smoothturn.curvalue = (int)vr_smoothturn->value;
+    float turn = Cvar_VariableValue("vr_snapturn_angle");
+    if (s_options_enable_smoothturn.curvalue == 0)
+    {
+        if (turn == 30.0f)
+            s_options_snapturn_angle_box.curvalue = 0;
+        else if (turn == 45.0f)
+            s_options_snapturn_angle_box.curvalue = 1;
+        else if (turn == 60.0f)
+            s_options_snapturn_angle_box.curvalue = 2;
+        else if (turn == 75.0f)
+            s_options_snapturn_angle_box.curvalue = 3;
+        else if (turn == 90.0f)
+            s_options_snapturn_angle_box.curvalue = 4;
+        else
+            s_options_snapturn_angle_box.curvalue = 0;
+    }
+    else
+    {
+        s_options_smoothturn_slider.curvalue = ClampCvar(1, 10, 11.0f - turn);
+    }
 }
 
 static void
@@ -1318,12 +1376,29 @@ Options_MenuInit(void)
         0
     };
 
+    static const char *yesno_smoothturn[] =
+    {
+            "no",
+            "yes",
+            0
+    };
+
     static const char *crosshair_names[] =
     {
         "none",
         "cross",
         "dot",
         "angle",
+        0
+    };
+
+    static const char *snapturn_angles[] =
+    {
+        "30",
+        "45",
+        "60",
+        "75",
+        "90",
         0
     };
 
@@ -1425,9 +1500,31 @@ Options_MenuInit(void)
     s_options_enable_item_wheels.generic.type = MTYPE_SPINCONTROL;
     s_options_enable_item_wheels.generic.x = 0;
     s_options_enable_item_wheels.generic.y = 110;
-    s_options_enable_item_wheels.generic.name = "Enable item wheels (Quest only)";
+    s_options_enable_item_wheels.generic.name = "Enable item wheels";
     s_options_enable_item_wheels.generic.callback = EnableWheels;
     s_options_enable_item_wheels.itemnames = yesno_thumbrest_wheels;
+
+    s_options_enable_smoothturn.generic.type = MTYPE_SPINCONTROL;
+    s_options_enable_smoothturn.generic.x = 0;
+    s_options_enable_smoothturn.generic.y = 120;
+    s_options_enable_smoothturn.generic.name = "Enable Smooth Turn";
+    s_options_enable_smoothturn.generic.callback = EnableSmoothTurn;
+    s_options_enable_smoothturn.itemnames = yesno_smoothturn;
+
+    s_options_snapturn_angle_box.generic.type = MTYPE_SPINCONTROL;
+    s_options_snapturn_angle_box.generic.x = 0;
+    s_options_snapturn_angle_box.generic.y = 130;
+    s_options_snapturn_angle_box.generic.name = "Turn Angle";
+    s_options_snapturn_angle_box.generic.callback = UpdateSnapTurnAngleFunc;
+    s_options_snapturn_angle_box.itemnames = snapturn_angles;
+
+    s_options_smoothturn_slider.generic.type = MTYPE_SLIDER;
+    s_options_smoothturn_slider.generic.x = 0;
+    s_options_smoothturn_slider.generic.y = 130;
+    s_options_smoothturn_slider.generic.name = "Turn Speed";
+    s_options_smoothturn_slider.generic.callback = UpdateSmoothTurnFunc;
+    s_options_smoothturn_slider.minvalue = 1;
+    s_options_smoothturn_slider.maxvalue = 10;
 
     s_options_crosshair_box.generic.type = MTYPE_SPINCONTROL;
     s_options_crosshair_box.generic.x = 0;
@@ -1480,6 +1577,15 @@ Options_MenuInit(void)
 //    if (show_haptic)
 //        Menu_AddItem(&s_options_menu, (void *)&s_options_haptic_slider);
     Menu_AddItem(&s_options_menu, (void *)&s_options_enable_item_wheels);
+    Menu_AddItem(&s_options_menu, (void *)&s_options_enable_smoothturn);
+    if (s_options_enable_smoothturn.curvalue)
+    {
+        Menu_AddItem(&s_options_menu, (void *)&s_options_smoothturn_slider);
+    }
+    else
+    {
+        Menu_AddItem(&s_options_menu, (void *)&s_options_snapturn_angle_box);
+    }
 //    Menu_AddItem(&s_options_menu, (void *)&s_options_customize_options_action);
     Menu_AddItem(&s_options_menu, (void *)&s_options_defaults_action);
     Menu_AddItem(&s_options_menu, (void *)&s_options_console_action);
