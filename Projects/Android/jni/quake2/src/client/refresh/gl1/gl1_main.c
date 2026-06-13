@@ -1903,14 +1903,16 @@ void R_DrawLaserSight( entity_t *e )
         glDepthMask(GL_FALSE);
         glDisable(GL_DEPTH_TEST);
 
+        float dot_radius;
         if (e->frame == 6 || e->frame == 7) {
             glColor4f(0, 0, 1, 1.0);
+            dot_radius = 0.2f;
         } else {
             glColor4f(1, 0, 0, 1.0);
+            dot_radius = 1.0f;
         }
 
 #define NUM_DOT_SEGS 16
-#define DOT_RADIUS 1.0f
 
         GLfloat vtx[3 * (NUM_DOT_SEGS + 2)];
         unsigned int index_vtx = 0;
@@ -1921,9 +1923,9 @@ void R_DrawLaserSight( entity_t *e )
 
         for (int i = 0; i <= NUM_DOT_SEGS; i++) {
             float angle = (2.0f * M_PI * i) / NUM_DOT_SEGS;
-            vtx[index_vtx++] = point[0] + DOT_RADIUS * vup[0] * cosf(angle) + DOT_RADIUS * vright[0] * sinf(angle);
-            vtx[index_vtx++] = point[1] + DOT_RADIUS * vup[1] * cosf(angle) + DOT_RADIUS * vright[1] * sinf(angle);
-            vtx[index_vtx++] = point[2] + DOT_RADIUS * vup[2] * cosf(angle) + DOT_RADIUS * vright[2] * sinf(angle);
+            vtx[index_vtx++] = point[0] + dot_radius * vup[0] * cosf(angle) + dot_radius * vright[0] * sinf(angle);
+            vtx[index_vtx++] = point[1] + dot_radius * vup[1] * cosf(angle) + dot_radius * vright[1] * sinf(angle);
+            vtx[index_vtx++] = point[2] + dot_radius * vup[2] * cosf(angle) + dot_radius * vright[2] * sinf(angle);
         }
 
         glEnableClientState(GL_VERTEX_ARRAY);
