@@ -1557,13 +1557,6 @@ Options_MenuInit(void)
     s_options_snapturn_angle_box.generic.callback = UpdateSnapTurnAngleFunc;
     s_options_snapturn_angle_box.itemnames = snapturn_angles;
 
-    s_options_enable_cheats.generic.type = MTYPE_SPINCONTROL;
-    s_options_enable_cheats.generic.x = 0;
-    s_options_enable_cheats.generic.y = 140;
-    s_options_enable_cheats.generic.name = "Enable Cheats";
-    s_options_enable_cheats.generic.callback = EnableCheats;
-    s_options_enable_cheats.itemnames = yesno_cheats;
-
     s_options_smoothturn_slider.generic.type = MTYPE_SLIDER;
     s_options_smoothturn_slider.generic.x = 0;
     s_options_smoothturn_slider.generic.y = 130;
@@ -1571,6 +1564,13 @@ Options_MenuInit(void)
     s_options_smoothturn_slider.generic.callback = UpdateSmoothTurnFunc;
     s_options_smoothturn_slider.minvalue = 1;
     s_options_smoothturn_slider.maxvalue = 10;
+
+    s_options_enable_cheats.generic.type = MTYPE_SPINCONTROL;
+    s_options_enable_cheats.generic.x = 0;
+    s_options_enable_cheats.generic.y = 140;
+    s_options_enable_cheats.generic.name = "Enable Cheats";
+    s_options_enable_cheats.generic.callback = EnableCheats;
+    s_options_enable_cheats.itemnames = yesno_cheats;
 
     s_options_crosshair_box.generic.type = MTYPE_SPINCONTROL;
     s_options_crosshair_box.generic.x = 0;
@@ -1595,13 +1595,13 @@ Options_MenuInit(void)
 
     s_options_defaults_action.generic.type = MTYPE_ACTION;
     s_options_defaults_action.generic.x = 0;
-    s_options_defaults_action.generic.y = 150;
+    s_options_defaults_action.generic.y = 170;
     s_options_defaults_action.generic.name = "reset defaults";
     s_options_defaults_action.generic.callback = ControlsResetDefaultsFunc;
 
     s_options_console_action.generic.type = MTYPE_ACTION;
     s_options_console_action.generic.x = 0;
-    s_options_console_action.generic.y = 160;
+    s_options_console_action.generic.y = 180;
     s_options_console_action.generic.name = "go to console";
     s_options_console_action.generic.callback = ConsoleFunc;
 
@@ -1664,10 +1664,6 @@ M_Menu_Options_f(void)
     Options_MenuInit();
     M_PushMenu(Options_MenuDraw, Options_MenuKey);
 }
-
-/*
- * CHEATS MENU
- */
 
 /*
  * CHEATS MENU
