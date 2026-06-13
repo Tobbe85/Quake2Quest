@@ -962,8 +962,8 @@ static void q2xr_UpdateHeadPose(void)
         vec3_t orientation;
         QuatToYawPitchRoll(location.pose.orientation, 0.0f, orientation);
         VectorCopy(orientation, hmdorientation);
-        setHMDPosition(location.pose.position.x, location.pose.position.y, location.pose.position.z, orientation[YAW]);
-        setWorldPosition(location.pose.position.x, location.pose.position.y, location.pose.position.z);
+        setHMDPosition(-location.pose.position.x, location.pose.position.y, -location.pose.position.z, orientation[YAW]);
+        setWorldPosition(-location.pose.position.x, location.pose.position.y, -location.pose.position.z);
     }
 }
 
@@ -1373,7 +1373,7 @@ void setWorldPosition(float x, float y, float z)
 
 void setHMDPosition(float x, float y, float z, float yaw)
 {
-    VectorSet(hmdPosition, x, y, z);
+    VectorSet(hmdPosition, -x, y, -z);
     if (!player_moving) {
         playerYaw = yaw;
     }
