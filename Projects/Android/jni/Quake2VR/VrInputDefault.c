@@ -210,7 +210,7 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
                 }
             }
 
-            if(vr_use_wheels->value > 0) {
+            if (vr_use_wheels->value > 0) {
                 {
                     // weapon selection wheel
                     if ((secondaryButtonsNew & secondaryButton2) !=
@@ -229,16 +229,16 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
                     vec3_t currentAngles;
                     vec2_t relativeAngles;
 
-                    if ((primaryTouchesNew & ovrTouch_ThumbRest) &&
-                        !(secondaryTouchesNew & ovrTouch_ThumbRest)) {
+                    if ((primaryButtonsNew & ovrButton_GripTrigger) &&
+                        !(secondaryButtonsNew & ovrButton_GripTrigger)) {
                         activeController = pDominantTracking; // regardless of handedness or stick assignment, makes sense to use the weapon hand for the weapon wheel
                         iconList = weaponIcons;
                         isItems = false;
                         totalIcons = 11;
                         active = true;
-                    } else if ((secondaryTouchesNew & ovrTouch_ThumbRest) &&
-                               !(primaryTouchesNew & ovrTouch_ThumbRest)) {
-                        activeController = pOffTracking; // conversely, makes sense to use the off hand for the item wheel
+                    } else if ((primaryJoystickNew.y < -0.9f) &&
+                               !(secondaryJoystickNew.y < -0.9f)) {
+                        activeController = pDominantTracking; // conversely, makes sense to use the off hand for the item wheel
                         iconList = itemIcons;
                         isItems = true;
                         totalIcons = 6;
@@ -390,7 +390,7 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
 				(between(0.8f, primaryJoystickNew.y, 1.0f) ||
 				 between(-1.0f, primaryJoystickNew.y, -0.8f)))
 			{
-				if (!itemSwitched) {
+				if (!itemSwitched && vr_use_wheels->value == 0) {
 					if (between(0.8f, primaryJoystickNew.y, 1.0f))
 					{
 					    if (inventoryManagementMode)
@@ -423,17 +423,25 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
 
         {
 			//Laser-sight
-			if ((pDominantTrackedRemoteNew->Buttons & ovrButton_Joystick) !=
-				(pDominantTrackedRemoteOld->Buttons & ovrButton_Joystick)
-				&& (pDominantTrackedRemoteNew->Buttons & ovrButton_Joystick)) {
+            if ((pDominantTrackedRemoteNew->Buttons & ovrButton_Joystick) !=
+                (pDominantTrackedRemoteOld->Buttons & ovrButton_Joystick)
+                && (pDominantTrackedRemoteNew->Buttons & ovrButton_Joystick))
+            {
+                float current = vr_lasersight->value;
 
-			    if (vr_lasersight->value != 0.0)
+                if (current == 0.0f)
+                {
+                    Cvar_ForceSet("vr_lasersight", "1.0");
+                }
+                else if (current == 1.0f)
+                {
+                    Cvar_ForceSet("vr_lasersight", "2.0");
+                }
+                else
                 {
                     Cvar_ForceSet("vr_lasersight", "0.0");
-                } else {
-                    Cvar_ForceSet("vr_lasersight", "1.0");
-			    }
-			}
+                }
+            }
 
 			//Apply a filter and quadratic scaler so small movements are easier to make
 			float dist = length(secondaryJoystickNew.x, secondaryJoystickNew.y);
@@ -462,11 +470,6 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
             if ((pOffTrackedRemoteNew->Buttons & ovrButton_Joystick) !=
                 (pOffTrackedRemoteOld->Buttons & ovrButton_Joystick)
                 && (pOffTrackedRemoteNew->Buttons & ovrButton_Joystick)) {
-
-                //If cheats enabled, give all weapons/pickups to player
-                if (sv_cheats->value == 1.0f) {
-                    Cbuf_AddText("give all\n");
-                }
 
             }
 

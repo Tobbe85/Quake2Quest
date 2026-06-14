@@ -60,6 +60,11 @@ static void M_Menu_Video_f(void);
 static void M_Menu_Options_f(void);
 static void M_Menu_Keys_f(void);
 static void M_Menu_Quit_f(void);
+static void M_Menu_Cheats_f(void);
+
+static void UpdateSmoothTurnFunc(void *unused);
+static float ClampCvar(float min, float max, float value);
+static void Options_MenuInit(void);
 
 void M_Menu_Credits(void);
 
@@ -590,7 +595,7 @@ M_Popup(void)
  * MAIN MENU
  */
 
-#define MAIN_ITEMS 5
+#define MAIN_ITEMS 6
 
 static void
 M_Main_Draw(void)
@@ -603,15 +608,33 @@ M_Main_Draw(void)
     int totalheight = 0;
     char litname[80];
 	float scale = SCR_GetMenuScale();
+    qboolean cheats_on = (Cvar_Get("cheats", "0", CVAR_ARCHIVE)->value != 0);
+
+    if (!cheats_on && m_main_cursor > 4)
+        m_main_cursor = 4;
+
     char *names[] =
+            {
+                    "m_main_game",
+                    "m_main_multiplayer",
+                    "m_main_options",
+                    "m_main_video",
+                    NULL,
+                    NULL,
+                    NULL
+            };
+
+    if (cheats_on)
     {
-        "m_main_game",
-        "m_main_multiplayer",
-        "m_main_options",
-        "m_main_video",
-        "m_main_quit",
-        0
-    };
+        names[4] = "m_main_cheats";
+        names[5] = "m_main_quit";
+        names[6] = NULL;
+    }
+    else
+    {
+        names[4] = "m_main_quit";
+        names[5] = NULL;
+    }
 
     for (i = 0; names[i] != 0; i++)
     {
@@ -678,27 +701,32 @@ M_Main_Key(int key)
     case K_ENTER:
         m_entersound = true;
 
+        qboolean cheats_on = (Cvar_Get("cheats", "0", CVAR_ARCHIVE)->value != 0);
+
         switch (m_main_cursor)
         {
-        case 0:
-            M_Menu_Game_f();
-            break;
-
-        case 1:
-            M_Menu_Multiplayer_f();
-            break;
-
-        case 2:
-            M_Menu_Options_f();
-            break;
-
-        case 3:
-            M_Menu_Video_f();
-            break;
-
-        case 4:
-            M_Menu_Quit_f();
-            break;
+            case 0:
+                M_Menu_Game_f();
+                break;
+            case 1:
+                M_Menu_Multiplayer_f();
+                break;
+            case 2:
+                M_Menu_Options_f();
+                break;
+            case 3:
+                M_Menu_Video_f();
+                break;
+            case 4:
+                if (cheats_on)
+                    M_Menu_Cheats_f();
+                else
+                    M_Menu_Quit_f();
+                break;
+            case 5:
+                if (cheats_on)
+                    M_Menu_Quit_f();
+                break;
         }
     }
 
@@ -1063,10 +1091,14 @@ static menuslider_s s_options_sfxvolume_slider;
 static menuslider_s s_options_haptic_slider;
 static menulist_s s_options_oggshuffle_box;
 static menuslider_s s_options_oggvolume_slider;
+static menuslider_s s_options_smoothturn_slider;
+static menulist_s s_options_snapturn_angle_box;
 static menulist_s s_options_oggenable_box;
 static menulist_s s_options_quality_list;
 static menulist_s s_options_console_action;
 static menulist_s s_options_enable_item_wheels;
+static menulist_s s_options_enable_smoothturn;
+static menulist_s s_options_enable_cheats;
 
 static void
 CrosshairFunc(void *unused)
@@ -1099,9 +1131,45 @@ EnableWheels(void *unused)
 }
 
 static void
+EnableSmoothTurn(void *unused)
+{
+    int old_cursor = s_options_menu.cursor;
+
+    Cvar_SetValue("vr_smoothturn",
+                  (float)s_options_enable_smoothturn.curvalue);
+
+    Options_MenuInit();
+
+    s_options_menu.cursor = old_cursor;
+}
+
+static void
+EnableCheats(void *unused)
+{
+    Cvar_SetValue("cheats", (float)s_options_enable_cheats.curvalue);
+}
+
+static void
 HeightAdjustFunc(void *unused)
 {
     Cvar_SetValue("vr_height_adjust", (float)(s_options_vr_height_adjust_box.curvalue / 10.0f));
+}
+
+static void
+UpdateSnapTurnAngleFunc(void *unused)
+{
+    static const float values[] = {30, 45, 60, 75, 90};
+
+    Cvar_SetValue("vr_snapturn_angle",
+                  values[s_options_snapturn_angle_box.curvalue]);
+}
+
+static void
+UpdateSmoothTurnFunc(void *unused)
+{
+    float speed = 11.0f - s_options_smoothturn_slider.curvalue;
+
+    Cvar_SetValue("vr_snapturn_angle", speed);
 }
 
 static void
@@ -1142,6 +1210,28 @@ ControlsSetMenuItemValues(void)
     s_options_crosshair_box.curvalue = ClampCvar(0, 3, crosshair->value);
     s_options_haptic_slider.curvalue = Cvar_VariableValue("joy_haptic_magnitude") * 10.0F;
     s_options_enable_item_wheels.curvalue = (int)vr_use_wheels->value;
+    s_options_enable_smoothturn.curvalue = (int)vr_smoothturn->value;
+    s_options_enable_cheats.curvalue = (int)Cvar_Get("cheats", "0", CVAR_ARCHIVE)->value;
+    float turn = Cvar_VariableValue("vr_snapturn_angle");
+    if (s_options_enable_smoothturn.curvalue == 0)
+    {
+        if (turn == 30.0f)
+            s_options_snapturn_angle_box.curvalue = 0;
+        else if (turn == 45.0f)
+            s_options_snapturn_angle_box.curvalue = 1;
+        else if (turn == 60.0f)
+            s_options_snapturn_angle_box.curvalue = 2;
+        else if (turn == 75.0f)
+            s_options_snapturn_angle_box.curvalue = 3;
+        else if (turn == 90.0f)
+            s_options_snapturn_angle_box.curvalue = 4;
+        else
+            s_options_snapturn_angle_box.curvalue = 0;
+    }
+    else
+    {
+        s_options_smoothturn_slider.curvalue = ClampCvar(1, 10, 11.0f - turn);
+    }
 }
 
 static void
@@ -1318,12 +1408,36 @@ Options_MenuInit(void)
         0
     };
 
+    static const char *yesno_smoothturn[] =
+    {
+            "no",
+            "yes",
+            0
+    };
+
+    static const char *yesno_cheats[] =
+            {
+                    "no",
+                    "yes",
+                    0
+            };
+
     static const char *crosshair_names[] =
     {
         "none",
         "cross",
         "dot",
         "angle",
+        0
+    };
+
+    static const char *snapturn_angles[] =
+    {
+        "30",
+        "45",
+        "60",
+        "75",
+        "90",
         0
     };
 
@@ -1425,9 +1539,38 @@ Options_MenuInit(void)
     s_options_enable_item_wheels.generic.type = MTYPE_SPINCONTROL;
     s_options_enable_item_wheels.generic.x = 0;
     s_options_enable_item_wheels.generic.y = 110;
-    s_options_enable_item_wheels.generic.name = "Enable item wheels (Quest only)";
+    s_options_enable_item_wheels.generic.name = "Enable item wheels";
     s_options_enable_item_wheels.generic.callback = EnableWheels;
     s_options_enable_item_wheels.itemnames = yesno_thumbrest_wheels;
+
+    s_options_enable_smoothturn.generic.type = MTYPE_SPINCONTROL;
+    s_options_enable_smoothturn.generic.x = 0;
+    s_options_enable_smoothturn.generic.y = 120;
+    s_options_enable_smoothturn.generic.name = "Enable Smooth Turn";
+    s_options_enable_smoothturn.generic.callback = EnableSmoothTurn;
+    s_options_enable_smoothturn.itemnames = yesno_smoothturn;
+
+    s_options_snapturn_angle_box.generic.type = MTYPE_SPINCONTROL;
+    s_options_snapturn_angle_box.generic.x = 0;
+    s_options_snapturn_angle_box.generic.y = 130;
+    s_options_snapturn_angle_box.generic.name = "Turn Angle";
+    s_options_snapturn_angle_box.generic.callback = UpdateSnapTurnAngleFunc;
+    s_options_snapturn_angle_box.itemnames = snapturn_angles;
+
+    s_options_smoothturn_slider.generic.type = MTYPE_SLIDER;
+    s_options_smoothturn_slider.generic.x = 0;
+    s_options_smoothturn_slider.generic.y = 130;
+    s_options_smoothturn_slider.generic.name = "Turn Speed";
+    s_options_smoothturn_slider.generic.callback = UpdateSmoothTurnFunc;
+    s_options_smoothturn_slider.minvalue = 1;
+    s_options_smoothturn_slider.maxvalue = 10;
+
+    s_options_enable_cheats.generic.type = MTYPE_SPINCONTROL;
+    s_options_enable_cheats.generic.x = 0;
+    s_options_enable_cheats.generic.y = 140;
+    s_options_enable_cheats.generic.name = "Enable Cheats";
+    s_options_enable_cheats.generic.callback = EnableCheats;
+    s_options_enable_cheats.itemnames = yesno_cheats;
 
     s_options_crosshair_box.generic.type = MTYPE_SPINCONTROL;
     s_options_crosshair_box.generic.x = 0;
@@ -1452,13 +1595,13 @@ Options_MenuInit(void)
 
     s_options_defaults_action.generic.type = MTYPE_ACTION;
     s_options_defaults_action.generic.x = 0;
-    s_options_defaults_action.generic.y = 150;
+    s_options_defaults_action.generic.y = 170;
     s_options_defaults_action.generic.name = "reset defaults";
     s_options_defaults_action.generic.callback = ControlsResetDefaultsFunc;
 
     s_options_console_action.generic.type = MTYPE_ACTION;
     s_options_console_action.generic.x = 0;
-    s_options_console_action.generic.y = 160;
+    s_options_console_action.generic.y = 180;
     s_options_console_action.generic.name = "go to console";
     s_options_console_action.generic.callback = ConsoleFunc;
 
@@ -1480,6 +1623,16 @@ Options_MenuInit(void)
 //    if (show_haptic)
 //        Menu_AddItem(&s_options_menu, (void *)&s_options_haptic_slider);
     Menu_AddItem(&s_options_menu, (void *)&s_options_enable_item_wheels);
+    Menu_AddItem(&s_options_menu, (void *)&s_options_enable_smoothturn);
+    if (s_options_enable_smoothturn.curvalue)
+    {
+        Menu_AddItem(&s_options_menu, (void *)&s_options_smoothturn_slider);
+    }
+    else
+    {
+        Menu_AddItem(&s_options_menu, (void *)&s_options_snapturn_angle_box);
+    }
+    Menu_AddItem(&s_options_menu, (void *)&s_options_enable_cheats);
 //    Menu_AddItem(&s_options_menu, (void *)&s_options_customize_options_action);
     Menu_AddItem(&s_options_menu, (void *)&s_options_defaults_action);
     Menu_AddItem(&s_options_menu, (void *)&s_options_console_action);
@@ -1510,6 +1663,106 @@ M_Menu_Options_f(void)
 {
     Options_MenuInit();
     M_PushMenu(Options_MenuDraw, Options_MenuKey);
+}
+
+/*
+ * CHEATS MENU
+ */
+
+static menuframework_s s_cheats_menu;
+static menuaction_s    s_cheats_godmode_action;
+static menuaction_s    s_cheats_allitems_action;
+static menuaction_s    s_cheats_noclip_action;
+static menuaction_s    s_cheats_notarget_action;
+
+static void
+CheatsGodmodeFunc(void *unused)
+{
+    Cbuf_AddText("god\n");
+}
+
+static void
+CheatsAllItemsFunc(void *unused)
+{
+    Cbuf_AddText("give all\n");
+}
+
+static void
+CheatsNoclipFunc(void *unused)
+{
+    Cbuf_AddText("noclip\n");
+}
+
+static void
+CheatsNoTargetFunc(void *unused)
+{
+    Cbuf_AddText("notarget\n");
+}
+
+static void
+Cheats_MenuInit(void)
+{
+    float scale = SCR_GetMenuScale();
+
+    s_cheats_menu.x = viddef.width / 2;
+    s_cheats_menu.y = viddef.height / (2 * scale) - 58;
+    s_cheats_menu.nitems = 0;
+
+    s_cheats_godmode_action.generic.type     = MTYPE_ACTION;
+    s_cheats_godmode_action.generic.flags    = QMF_LEFT_JUSTIFY;
+    s_cheats_godmode_action.generic.x        = 0;
+    s_cheats_godmode_action.generic.y        = 0;
+    s_cheats_godmode_action.generic.name     = "godmode (on/off)";
+    s_cheats_godmode_action.generic.callback = CheatsGodmodeFunc;
+
+    s_cheats_allitems_action.generic.type     = MTYPE_ACTION;
+    s_cheats_allitems_action.generic.flags    = QMF_LEFT_JUSTIFY;
+    s_cheats_allitems_action.generic.x        = 0;
+    s_cheats_allitems_action.generic.y        = 10;
+    s_cheats_allitems_action.generic.name     = "all weapons and items";
+    s_cheats_allitems_action.generic.callback = CheatsAllItemsFunc;
+
+    s_cheats_noclip_action.generic.type     = MTYPE_ACTION;
+    s_cheats_noclip_action.generic.flags    = QMF_LEFT_JUSTIFY;
+    s_cheats_noclip_action.generic.x        = 0;
+    s_cheats_noclip_action.generic.y        = 20;
+    s_cheats_noclip_action.generic.name     = "no clip (on/off)";
+    s_cheats_noclip_action.generic.callback = CheatsNoclipFunc;
+
+    s_cheats_notarget_action.generic.type     = MTYPE_ACTION;
+    s_cheats_notarget_action.generic.flags    = QMF_LEFT_JUSTIFY;
+    s_cheats_notarget_action.generic.x        = 0;
+    s_cheats_notarget_action.generic.y        = 30;
+    s_cheats_notarget_action.generic.name     = "no target (on/off)";
+    s_cheats_notarget_action.generic.callback = CheatsNoTargetFunc;
+
+    Menu_AddItem(&s_cheats_menu, (void *)&s_cheats_godmode_action);
+    Menu_AddItem(&s_cheats_menu, (void *)&s_cheats_allitems_action);
+    Menu_AddItem(&s_cheats_menu, (void *)&s_cheats_noclip_action);
+    Menu_AddItem(&s_cheats_menu, (void *)&s_cheats_notarget_action);
+
+    Menu_Center(&s_cheats_menu);
+}
+
+static void
+Cheats_MenuDraw(void)
+{
+    M_Banner("m_banner_options");
+    Menu_AdjustCursor(&s_cheats_menu, 1);
+    Menu_Draw(&s_cheats_menu);
+}
+
+static const char *
+Cheats_MenuKey(int key)
+{
+    return Default_MenuKey(&s_cheats_menu, key);
+}
+
+static void
+M_Menu_Cheats_f(void)
+{
+    Cheats_MenuInit();
+    M_PushMenu(Cheats_MenuDraw, Cheats_MenuKey);
 }
 
 /*
