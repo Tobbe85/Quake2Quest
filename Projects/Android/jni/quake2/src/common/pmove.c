@@ -134,8 +134,12 @@ PM_StepSlideMove_(void)
 
 		if (trace.allsolid)
 		{
-			/* entity is trapped in another solid */
-			pml.velocity[2] = 0; /* don't build up falling damage */
+			/* entity is trapped in another solid. Kill ALL velocity, not just the
+			 * vertical: otherwise PM_AirMove keeps accelerating the player into the
+			 * wall every frame (the slide can't clip it while trapped), which both
+			 * pins them and builds up to a launch when they finally come free.
+			 * PM_SnapPosition will extract them from the solid. */
+			VectorClear(pml.velocity);
 			return;
 		}
 
@@ -1137,17 +1141,77 @@ PM_GoodPosition(void)
 void
 PM_SnapPosition(void)
 {
-	//NO SNAPPING - BREAKS POSITIONAL TRACKING
-	int i;
-	for (i=0 ; i<3 ; i++) {
-		pm->s.origin[i] = pml.origin[i] * 8.0f;
-	}
+	int i, j, bits;
+	int sign[3];
+	float base[3];
+	/* try the unmodified position first, then single-axis nudges, then pairs */
+	static const int jitterbits[8] = {0, 4, 1, 2, 3, 5, 6, 7};
 
-	for (i=0 ; i<3 ; i++) {
+	for (i = 0; i < 3; i++) {
 		pm->s.velocity[i] = pml.velocity[i] * 8.0f;
 	}
 
-	return;
+	/* NB: we keep the full-precision float value here (no truncation to the
+	 * 1/8 unit grid). Re-quantizing was what broke smooth VR positional
+	 * tracking; jitterbits[0] below tests this exact position first, so when
+	 * we are not stuck we return it untouched. */
+	for (i = 0; i < 3; i++) {
+		sign[i] = (pml.origin[i] >= 0) ? 1 : -1;
+		pm->s.origin[i] = pml.origin[i] * 8.0f;
+	}
+
+	VectorCopy(pm->s.origin, base);
+
+	/* Anti-stuck search (restored from stock Quake II): try the position as-is,
+	 * then progressively nudge each axis by +/- one 1/8 unit to escape a solid. */
+	for (j = 0; j < 8; j++) {
+		bits = jitterbits[j];
+		VectorCopy(base, pm->s.origin);
+
+		for (i = 0; i < 3; i++) {
+			if (bits & (1 << i)) {
+				pm->s.origin[i] += sign[i];
+			}
+		}
+
+		if (PM_GoodPosition()) {
+			return;
+		}
+	}
+
+	/* The small jitter above only escapes sub-unit penetration. Diagnostics showed the
+	 * player can end up genuinely embedded several units into a wall after a jump, with
+	 * previous_origin also embedded - so neither the jitter nor a revert can free them.
+	 * Search outwards along each axis for the nearest non-solid spot and move there.
+	 * We do this even in mid-air: being nudged free is always better than staying
+	 * embedded (which is exactly what causes the wall-stick). */
+	{
+		float radius;
+		int ax, dir;
+		for (radius = 1.0f; radius <= 40.0f; radius += 1.0f)
+		{
+			for (ax = 0; ax < 3; ax++)
+			{
+				for (dir = -1; dir <= 1; dir += 2)
+				{
+					VectorCopy(base, pm->s.origin);
+					pm->s.origin[ax] += dir * radius * 8.0f; /* radius world units in 1/8 space */
+
+					if (PM_GoodPosition())
+					{
+						return;
+					}
+				}
+			}
+		}
+	}
+
+	/* Could not find any free spot nearby (very rare). Fall back to the previous origin
+	 * when on the ground; in mid-air leave the position so physics keeps running. */
+	if (pm->groundentity)
+	{
+		VectorCopy(pml.previous_origin, pm->s.origin);
+	}
 }
 
 void

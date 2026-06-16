@@ -81,6 +81,7 @@ cvar_t *vr_comfort_mask;
 cvar_t *vr_turn_deadzone;
 cvar_t *vr_framerate;
 cvar_t *vr_use_wheels;
+cvar_t *vr_jump_sound;
 char **refresh_names;
 float *refresh_values;
 
@@ -770,14 +771,18 @@ static void q2xr_ProcessHaptics(float frameTimeMs)
 #define XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME "XR_BD_controller_interaction"
 #endif
 
+static bool q2xr_ExtensionSupported(const XrExtensionProperties *props, uint32_t count, const char *name)
+{
+    for (uint32_t i = 0; i < count; i++) {
+        if (strcmp(props[i].extensionName, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool q2xr_InitOpenXR(q2xrAppThread *thread)
 {
-    const char *extensions[] = {
-        XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
-        XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
-        XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME
-    };
-
     PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR = NULL;
     xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR", (PFN_xrVoidFunction *)&xrInitializeLoaderKHR);
     if (xrInitializeLoaderKHR) {
@@ -786,6 +791,48 @@ static bool q2xr_InitOpenXR(q2xrAppThread *thread)
         loaderInitInfo.applicationContext = thread->ActivityObject;
         xrInitializeLoaderKHR((XrLoaderInitInfoBaseHeaderKHR *)&loaderInitInfo);
     }
+
+    /* Enumerate the runtime's available extensions so we only request what it
+     * actually supports. The Pico controller extension (XR_BD_controller_interaction)
+     * is absent on the Meta runtime, and requesting an unsupported extension makes
+     * xrCreateInstance fail outright (XR_ERROR_EXTENSION_NOT_PRESENT), which would
+     * leave the app hanging on the loading screen. */
+    uint32_t availableCount = 0;
+    xrEnumerateInstanceExtensionProperties(NULL, 0, &availableCount, NULL);
+
+    XrExtensionProperties *available = NULL;
+    if (availableCount > 0) {
+        available = (XrExtensionProperties *)malloc(availableCount * sizeof(XrExtensionProperties));
+    }
+    if (available) {
+        for (uint32_t i = 0; i < availableCount; i++) {
+            memset(&available[i], 0, sizeof(available[i]));
+            available[i].type = XR_TYPE_EXTENSION_PROPERTIES;
+        }
+        if (XR_FAILED(xrEnumerateInstanceExtensionProperties(NULL, availableCount, &availableCount, available))) {
+            availableCount = 0;
+        }
+    } else {
+        availableCount = 0;
+    }
+
+    const char *extensions[8];
+    uint32_t extensionCount = 0;
+    /* Required. */
+    extensions[extensionCount++] = XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME;
+    extensions[extensionCount++] = XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME;
+    /* Optional: enable Pico controller bindings only on a runtime that has them. */
+    if (q2xr_ExtensionSupported(available, availableCount, XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME)) {
+        extensions[extensionCount++] = XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME;
+        ALOGV("Q2XR enabling %s", XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME);
+    }
+    /* Optional: lets us lock the display to 72Hz where the runtime supports it. */
+    if (q2xr_ExtensionSupported(available, availableCount, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME)) {
+        extensions[extensionCount++] = XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME;
+        ALOGV("Q2XR enabling %s", XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+    }
+
+    free(available);
 
     XrApplicationInfo appInfo;
     memset(&appInfo, 0, sizeof(appInfo));
@@ -804,7 +851,7 @@ static bool q2xr_InitOpenXR(q2xrAppThread *thread)
     createInfo.type = XR_TYPE_INSTANCE_CREATE_INFO;
     createInfo.next = &androidInfo;
     createInfo.applicationInfo = appInfo;
-    createInfo.enabledExtensionCount = sizeof(extensions) / sizeof(extensions[0]);
+    createInfo.enabledExtensionCount = extensionCount;
     createInfo.enabledExtensionNames = extensions;
 
     XrResult result = xrCreateInstance(&createInfo, &gApp.Instance);
@@ -853,7 +900,7 @@ static bool q2xr_InitOpenXR(q2xrAppThread *thread)
 
     gApp.Width = (int)(gApp.ViewConfig[0].recommendedImageRectWidth * SS_MULTIPLIER);
     gApp.Height = (int)(gApp.ViewConfig[0].recommendedImageRectHeight * SS_MULTIPLIER);
-    gApp.RefreshRate = 90;
+    gApp.RefreshRate = 72; /* fixed 72Hz - higher rates can stutter on this engine */
     ALOGV("Q2XR view size recommended=%ux%u using=%dx%d",
           gApp.ViewConfig[0].recommendedImageRectWidth,
           gApp.ViewConfig[0].recommendedImageRectHeight,
@@ -874,6 +921,19 @@ static bool q2xr_InitOpenXR(q2xrAppThread *thread)
         return false;
     }
     ALOGV("Q2XR xrCreateSession succeeded");
+
+    /* Lock the display to 72Hz. The engine's frame timing assumes this (gApp.RefreshRate),
+     * and higher refresh rates can stutter on this engine, so it is not user-selectable.
+     * Best-effort: the proc only resolves if XR_FB_display_refresh_rate was enabled above;
+     * otherwise we inherit the runtime default (72Hz on Quest). */
+    {
+        PFN_xrRequestDisplayRefreshRateFB pfnRequestDisplayRefreshRate = NULL;
+        if (XR_SUCCEEDED(xrGetInstanceProcAddr(gApp.Instance, "xrRequestDisplayRefreshRateFB",
+                (PFN_xrVoidFunction *)&pfnRequestDisplayRefreshRate)) && pfnRequestDisplayRefreshRate) {
+            XrResult rr = pfnRequestDisplayRefreshRate(gApp.Session, 72.0f);
+            ALOGV("Q2XR request 72Hz display refresh: %d", rr);
+        }
+    }
 
     XrReferenceSpaceCreateInfo spaceInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
     spaceInfo.poseInReferenceSpace = q2xr_IdentityPose();
@@ -1162,6 +1222,7 @@ bool useScreenLayer()
 {
     return ((cls.state != ca_connected && cls.state != ca_active) ||
             cls.key_dest != key_game ||
+            cl.attractloop ||              /* startup/attract demo: show on the flat cinematic screen, not 6DoF */
             cl.cinematictime != 0);
 }
 
@@ -1280,7 +1341,7 @@ void VR_Init()
 
     vr_snapturn_angle = Cvar_Get("vr_snapturn_angle", "45", CVAR_ARCHIVE);
     vr_smoothturn = Cvar_Get("vr_smoothturn", "0", CVAR_ARCHIVE);
-    vr_walkdirection = Cvar_Get("vr_walkdirection", "0", CVAR_ARCHIVE);
+    vr_walkdirection = Cvar_Get("vr_walkdirection", "1", CVAR_ARCHIVE); /* 1 = gaze/HMD direction (default), 0 = off-hand controller */
     vr_weapon_pitchadjust = Cvar_Get("vr_weapon_pitchadjust", "-20.0", CVAR_ARCHIVE);
     vr_control_scheme = Cvar_Get("vr_control_scheme", "0", CVAR_ARCHIVE);
     vr_height_adjust = Cvar_Get("vr_height_adjust", "0.0", CVAR_ARCHIVE);
@@ -1289,9 +1350,10 @@ void VR_Init()
     vr_comfort_mask = Cvar_Get("vr_comfort_mask", "0.0", CVAR_ARCHIVE);
     vr_turn_deadzone = Cvar_Get("vr_turn_deadzone", "0.2", CVAR_ARCHIVE);
     vr_framerate = Cvar_Get("vr_framerate", "0", CVAR_ARCHIVE);
-    vr_use_wheels = Cvar_Get("vr_use_wheels", "0", CVAR_ARCHIVE);
+    vr_use_wheels = Cvar_Get("vr_use_wheels", "1", CVAR_ARCHIVE);
+    vr_jump_sound = Cvar_Get("vr_jump_sound", "1", CVAR_ARCHIVE);
     vr_worldscale = Cvar_Get("vr_worldscale", "26.2467", CVAR_ARCHIVE);
-	vr_lasersight = Cvar_Get("vr_lasersight", "0", CVAR_ARCHIVE);
+	vr_lasersight = Cvar_Get("vr_lasersight", "2", CVAR_ARCHIVE); /* 2 = simple laser dot */
     Cvar_Get("vr_hud_depth", "0.5", CVAR_ARCHIVE);
     Cvar_Get("vr_hud_ipd", "0.064", CVAR_ARCHIVE);
     Cvar_Get("vr_screen_depth", "3.5", CVAR_ARCHIVE);
@@ -1388,8 +1450,16 @@ void getVROrigins(vec3_t _weaponoffset, vec3_t _weaponangles, vec3_t _hmdPositio
 
 void VR_GetMove(float *forward, float *side, float *up, float *yaw, float *pitch, float *roll)
 {
-    *forward = remote_movementForward + positional_movementForward;
-    *side = remote_movementSideways + positional_movementSideways;
+    // Safety net: only let room-scale/head positional movement drive the player while
+    // on the ground. When airborne, physically leaning into geometry could otherwise
+    // shove the collision box into a wall and wedge the player mid-jump. Thumbstick
+    // (remote_*) air-control is unaffected.
+    qboolean onGround = (cl.frame.playerstate.pmove.pm_flags & PMF_ON_GROUND) != 0;
+    float posForward = onGround ? positional_movementForward : 0.0f;
+    float posSide = onGround ? positional_movementSideways : 0.0f;
+
+    *forward = remote_movementForward + posForward;
+    *side = remote_movementSideways + posSide;
     *up = remote_movementUp;
     *yaw = hmdorientation[YAW] + snapTurn;
     *pitch = hmdorientation[PITCH];

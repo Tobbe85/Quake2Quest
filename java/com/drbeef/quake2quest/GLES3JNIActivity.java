@@ -52,10 +52,8 @@ import static android.system.Os.setenv;
 
 	private static final String TAG = "Quake2Quest";
 
-	private boolean permissionsGranted = false;
 	private static final int WRITE_EXTERNAL_STORAGE_PERMISSION_ID = 2;
-
-	private int permissionAttempt = 0;
+	private static final int MANAGE_EXTERNAL_STORAGE_PERMISSION_ID = 3;
 
 	String commandLineParams;
 
@@ -112,48 +110,68 @@ import static android.system.Os.setenv;
 			return;
 		}
 
-		if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-				!= PackageManager.PERMISSION_GRANTED) {
-			ActivityCompat.requestPermissions(
-					this,
-					new String[] {
-							Manifest.permission.READ_EXTERNAL_STORAGE,
-							Manifest.permission.WRITE_EXTERNAL_STORAGE
-					},
-					WRITE_EXTERNAL_STORAGE_PERMISSION_ID);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			// Android 11+ (e.g. Quest on Android 12, Pico on Android 11). The app reads and
+			// writes user-supplied data in /sdcard/Quake2Quest, which needs "All files access".
+			// This is launched as a Settings panel, which is reliably shown and usable inside
+			// the VR shell - unlike the inline runtime permission dialog, which often does not
+			// surface (or is not clickable) in vr_only mode.
+			if (Environment.isExternalStorageManager()) {
+				create();
+			} else {
+				try {
+					Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+					intent.setData(Uri.parse("package:" + getPackageName()));
+					startActivityForResult(intent, MANAGE_EXTERNAL_STORAGE_PERMISSION_ID);
+				} catch (Exception e) {
+					// Some runtimes lack the per-app screen; fall back to the global list.
+					try {
+						startActivityForResult(
+								new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+								MANAGE_EXTERNAL_STORAGE_PERMISSION_ID);
+					} catch (Exception ignored) {
+						// Nothing we can launch; start anyway rather than stalling on a blank screen.
+						create();
+					}
+				}
+			}
 		} else {
+			// Android 10 and below: classic runtime read/write storage permissions.
+			if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+					!= PackageManager.PERMISSION_GRANTED
+					|| ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+					!= PackageManager.PERMISSION_GRANTED) {
+				ActivityCompat.requestPermissions(
+						this,
+						new String[] {
+								Manifest.permission.READ_EXTERNAL_STORAGE,
+								Manifest.permission.WRITE_EXTERNAL_STORAGE
+						},
+						WRITE_EXTERNAL_STORAGE_PERMISSION_ID);
+			} else {
+				create();
+			}
+		}
+	}
+
+	/** Handles returning from the "All files access" Settings screen (Android 11+). */
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode == MANAGE_EXTERNAL_STORAGE_PERMISSION_ID) {
+			// Start regardless of the result: if access was granted we have full storage,
+			// and if it was not we still launch (the engine reports missing game data)
+			// rather than bouncing back to Settings in a loop.
 			create();
 		}
 	}
 
-	/** Handles the user accepting the permission. */
+	/** Handles the runtime storage permission dialog result (Android 10 and below). */
 	@Override
 	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
 		super.onRequestPermissionsResult(requestCode, permissions, results);
-
 		if (requestCode == WRITE_EXTERNAL_STORAGE_PERMISSION_ID) {
-			permissionAttempt++;
-
-			boolean granted = false;
-			if (results != null) {
-				for (int result : results) {
-					if (result == PackageManager.PERMISSION_GRANTED) {
-						granted = true;
-						break;
-					}
-				}
-			}
-
-			if (granted) {
-				create();
-				return;
-			}
-
-			if (permissionAttempt < 5) {
-				checkPermissionsAndInitialize();
-			} else {
-				System.exit(0);
-			}
+			create();
 		}
 	}
 

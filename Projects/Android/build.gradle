@@ -20,7 +20,10 @@ apply plugin: 'com.android.application'
 
 android {
     namespace "com.drbeef.quake2quest"
-    compileSdk 29
+    // compileSdk must stay >= 30 so the All-Files-Access APIs (Environment.isExternalStorageManager,
+    // Build.VERSION_CODES.R, ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION) used in
+    // GLES3JNIActivity compile. targetSdk is intentionally kept lower (see below).
+    compileSdk 34
     ndkVersion "26.1.10909125"
 
     project.archivesBaseName = "quake2quest"
@@ -35,6 +38,8 @@ android {
     defaultConfig {
         applicationId "com.drbeef." + project.archivesBaseName
         minSdk 29
+        // Kept at 29 so requestLegacyExternalStorage is honoured and storage behaviour stays
+        // consistent across Quest/Pico. Raising compileSdk above does not change runtime behaviour.
         targetSdk 29
 
         ndk {
