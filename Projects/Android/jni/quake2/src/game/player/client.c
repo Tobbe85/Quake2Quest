@@ -2348,8 +2348,16 @@ ClientThink(edict_t *ent, usercmd_t *ucmd)
 		if (ent->groundentity && !pm.groundentity && (pm.cmd.upmove >= 10) &&
 			(pm.waterlevel == 0))
 		{
-			gi.sound(ent, CHAN_VOICE, gi.soundindex(
-							"*jump1.wav"), 1, ATTN_NORM, 0);
+			/* Only play the grunt for a genuine upward jump (velocity[2] > 0), not for
+			 * merely leaving the ground - e.g. running off a ledge/step with jump held,
+			 * which was making it fire far too often in VR. Also gated by vr_jump_sound
+			 * so it can be turned off entirely. PlayerNoise is left on the stock
+			 * condition so monster AI hearing is unchanged. */
+			if (vr_jump_sound->value && (ent->velocity[2] > 0))
+			{
+				gi.sound(ent, CHAN_VOICE, gi.soundindex(
+								"*jump1.wav"), 1, ATTN_NORM, 0);
+			}
 			PlayerNoise(ent, ent->s.origin, PNOISE_SELF);
 		}
 

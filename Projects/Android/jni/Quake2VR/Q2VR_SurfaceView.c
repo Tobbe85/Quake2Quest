@@ -770,14 +770,18 @@ static void q2xr_ProcessHaptics(float frameTimeMs)
 #define XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME "XR_BD_controller_interaction"
 #endif
 
+static bool q2xr_ExtensionSupported(const XrExtensionProperties *props, uint32_t count, const char *name)
+{
+    for (uint32_t i = 0; i < count; i++) {
+        if (strcmp(props[i].extensionName, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool q2xr_InitOpenXR(q2xrAppThread *thread)
 {
-    const char *extensions[] = {
-        XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
-        XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
-        XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME
-    };
-
     PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR = NULL;
     xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR", (PFN_xrVoidFunction *)&xrInitializeLoaderKHR);
     if (xrInitializeLoaderKHR) {
@@ -786,6 +790,43 @@ static bool q2xr_InitOpenXR(q2xrAppThread *thread)
         loaderInitInfo.applicationContext = thread->ActivityObject;
         xrInitializeLoaderKHR((XrLoaderInitInfoBaseHeaderKHR *)&loaderInitInfo);
     }
+
+    /* Enumerate the runtime's available extensions so we only request what it
+     * actually supports. The Pico controller extension (XR_BD_controller_interaction)
+     * is absent on the Meta runtime, and requesting an unsupported extension makes
+     * xrCreateInstance fail outright (XR_ERROR_EXTENSION_NOT_PRESENT), which would
+     * leave the app hanging on the loading screen. */
+    uint32_t availableCount = 0;
+    xrEnumerateInstanceExtensionProperties(NULL, 0, &availableCount, NULL);
+
+    XrExtensionProperties *available = NULL;
+    if (availableCount > 0) {
+        available = (XrExtensionProperties *)malloc(availableCount * sizeof(XrExtensionProperties));
+    }
+    if (available) {
+        for (uint32_t i = 0; i < availableCount; i++) {
+            memset(&available[i], 0, sizeof(available[i]));
+            available[i].type = XR_TYPE_EXTENSION_PROPERTIES;
+        }
+        if (XR_FAILED(xrEnumerateInstanceExtensionProperties(NULL, availableCount, &availableCount, available))) {
+            availableCount = 0;
+        }
+    } else {
+        availableCount = 0;
+    }
+
+    const char *extensions[8];
+    uint32_t extensionCount = 0;
+    /* Required. */
+    extensions[extensionCount++] = XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME;
+    extensions[extensionCount++] = XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME;
+    /* Optional: enable Pico controller bindings only on a runtime that has them. */
+    if (q2xr_ExtensionSupported(available, availableCount, XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME)) {
+        extensions[extensionCount++] = XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME;
+        ALOGV("Q2XR enabling %s", XR_PICO_CONTROLLER_INTERACTION_EXTENSION_NAME);
+    }
+
+    free(available);
 
     XrApplicationInfo appInfo;
     memset(&appInfo, 0, sizeof(appInfo));
@@ -804,7 +845,7 @@ static bool q2xr_InitOpenXR(q2xrAppThread *thread)
     createInfo.type = XR_TYPE_INSTANCE_CREATE_INFO;
     createInfo.next = &androidInfo;
     createInfo.applicationInfo = appInfo;
-    createInfo.enabledExtensionCount = sizeof(extensions) / sizeof(extensions[0]);
+    createInfo.enabledExtensionCount = extensionCount;
     createInfo.enabledExtensionNames = extensions;
 
     XrResult result = xrCreateInstance(&createInfo, &gApp.Instance);
@@ -1162,6 +1203,7 @@ bool useScreenLayer()
 {
     return ((cls.state != ca_connected && cls.state != ca_active) ||
             cls.key_dest != key_game ||
+            cl.attractloop ||              /* startup/attract demo: show on the flat cinematic screen, not 6DoF */
             cl.cinematictime != 0);
 }
 
@@ -1388,8 +1430,16 @@ void getVROrigins(vec3_t _weaponoffset, vec3_t _weaponangles, vec3_t _hmdPositio
 
 void VR_GetMove(float *forward, float *side, float *up, float *yaw, float *pitch, float *roll)
 {
-    *forward = remote_movementForward + positional_movementForward;
-    *side = remote_movementSideways + positional_movementSideways;
+    // Safety net: only let room-scale/head positional movement drive the player while
+    // on the ground. When airborne, physically leaning into geometry could otherwise
+    // shove the collision box into a wall and wedge the player mid-jump. Thumbstick
+    // (remote_*) air-control is unaffected.
+    qboolean onGround = (cl.frame.playerstate.pmove.pm_flags & PMF_ON_GROUND) != 0;
+    float posForward = onGround ? positional_movementForward : 0.0f;
+    float posSide = onGround ? positional_movementSideways : 0.0f;
+
+    *forward = remote_movementForward + posForward;
+    *side = remote_movementSideways + posSide;
     *up = remote_movementUp;
     *yaw = hmdorientation[YAW] + snapTurn;
     *pitch = hmdorientation[PITCH];

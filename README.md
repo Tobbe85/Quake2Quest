@@ -1,9 +1,16 @@
 Quake2Quest
 ==========
 
-Welcome to the first (and only I believe) full 6DoF implementation of the Quake 2 Engine in VR.
+**A Team Beef VR port** bringing the classic Quake 2 to standalone VR headsets — a full 6DoF, room-scale implementation of the Quake 2 engine, built on top of [Yamagi Quake 2](https://www.yamagi.org/quake2/).
 
-This is built solely for the Oculus Quest 1 and 2 VR HMDs and will *not* run on any other device.
+Built on the open **OpenXR** standard, it supports both Meta and Pico devices:
+
+* Meta Quest 2, Quest 3 and Quest Pro
+* Pico Neo 3 and Pico 4
+
+Older devices (the original Oculus Quest) are no longer supported.
+
+For more from Team Beef, see [teambeefvr.com](https://www.teambeefvr.com).
 
 The easiest way to install this on your Quest is using SideQuest, a Desktop app designed to simplify sideloading apps and games ( even beat saber songs on quest ) on Standalone Android Headsets like Oculus Quest and Oculus Go. It supports drag and drop for installing APK files!
 
@@ -93,21 +100,35 @@ I would like to thank the following teams and individual for making this possibl
 
 * Emile Belanger - For advice regarding converting the Android build of Yamagi. See his other Android ports [here](http://www.beloko.com/)
 * [The Yamagi Team](https://www.yamagi.org/quake2/) - For the excellent engine this based upon.
-* Baggyg - My long-time VR friend whose roles in this have been varied and all helpful, also the creator of excellent websites/artwork/assets for this mod as well as altering models to be more VR friendly
+* [Fighterguard](https://github.com/fighterguard) - For contributing the weapon and item selection wheels (and the option to enable/disable them)
+* [Tobbe85](https://github.com/Tobbe85) - For Pico headset support (controls, permissions and the weapon wheel), the laser sight, the cheats menu, turn options and various menu and head-tracking improvements
 * The [SideQuest](https://sidequestvr.com/#/news) team - For making it easy for people to install this
-* GLE4ES for the OpenGL -> OpenGLES2 translation: without which this project wouldn't have worked at all: https://github.com/ptitSeb/gl4es
+* [gl4es](https://github.com/ptitSeb/gl4es) for the OpenGL -> OpenGL ES 2 translation: without which this project wouldn't have worked at all
+* The [Khronos Group](https://github.com/KhronosGroup/OpenXR-SDK) for the OpenXR SDK that now drives headset and controller tracking
 
 
 Building:
 ---------
 
-You need the following:
+The project is a self-contained Gradle build using the Khronos OpenXR loader. You need the following:
 
-* Android Developer Studio
-* Android SDK API level 24
-* Latest Android Native Development Kit
-* Oculus Mobile SDK 1.24.0
-* The Quake2Quest folder cloned from GitHub should be below VrSamples in the extracted SDK
-* Create a local.properties file in the root of the extracted Oculus Mobile SDK that contains the ndk.dir and sdk.dir properties for where your SDK/NDK are located (see Gradle documentation regarding this)
-* To build debug you will need a _android.debug.keystore_ file placed in the following folder:
-_oculus_sdk_dir_/VrSamples/Quake2Quest/Projects/Android
+* Android Studio
+* Android SDK Platform API level 29
+* Android NDK r26 (the build is pinned to NDK `26.1.10909125`)
+
+To build:
+
+1) Clone this repository anywhere on disk.
+2) In `Projects/Android`, create a `local.properties` file containing an `sdk.dir` property pointing at your Android SDK location, e.g. `sdk.dir=C:\\Users\\you\\AppData\\Local\\Android\\Sdk`. (Android Studio will create this for you when you open the project.)
+3) Open `Projects/Android` in Android Studio, or build from the command line:
+
+```
+cd Projects/Android
+./gradlew assembleDebug      # debug APK
+./gradlew assembleRelease    # release APK
+./gradlew installDebug       # build and install to a connected headset over adb
+```
+
+The resulting APKs are written to `Projects/Android/build/outputs/apk/`. Only the `arm64-v8a` ABI is built.
+
+Debug builds are signed automatically with the checked-in `android.debug.keystore` (located in `Projects/Android`). For a release build with your own key, pass `-Pkey.store=...`, `-Pkey.store.password=...`, `-Pkey.alias=...` and `-Pkey.alias.password=...` to Gradle.

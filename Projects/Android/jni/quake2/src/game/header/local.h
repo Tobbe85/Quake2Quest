@@ -525,6 +525,7 @@ extern cvar_t *vr_worldscale;
 extern cvar_t *vr_height_adjust;
 extern cvar_t *vr_lasersight;
 extern cvar_t *vr_weapon_stabilised;
+extern cvar_t *vr_jump_sound;
 
 extern cvar_t *run_pitch;
 extern cvar_t *run_roll;

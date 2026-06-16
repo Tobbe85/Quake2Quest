@@ -64,6 +64,7 @@ cvar_t *vr_worldscale;
 cvar_t *vr_height_adjust;
 cvar_t *vr_lasersight;
 cvar_t *vr_weapon_stabilised;
+cvar_t *vr_jump_sound;
 
 cvar_t *sv_rollspeed;
 cvar_t *sv_rollangle;

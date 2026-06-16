@@ -405,8 +405,12 @@ SCR_CenterPrint(char *str)
 	Con_ClearNotify();
 }
 
+/* defined further down; forward-declared so the HUD/centerprint draws above can converge for VR */
+static int SCR_GetStereoHudOffsetScaled(float separation, float depthScale);
+static int SCR_GetStereoHudOffset(float separation);
+
 void
-SCR_DrawCenterString(void)
+SCR_DrawCenterString(float separation)
 {
 	char *start;
 	int l;
@@ -416,6 +420,10 @@ SCR_DrawCenterString(void)
 	float scale;
     const int char_unscaled_width  = 8;
     const int char_unscaled_height = 8;
+	/* centerprints (e.g. level hint messages like "crouch here") must be shifted
+	 * per-eye like the rest of the HUD, otherwise they're not stereo-converged and
+	 * are unreadable in VR. */
+	int offset_stereo = SCR_GetStereoHudOffset(separation);
 
 	/* the finale prints the characters one at a time */
 	remaining = 9999;
@@ -450,7 +458,7 @@ SCR_DrawCenterString(void)
 
 		for (j = 0; j < l; j++, x += char_unscaled_width)
 		{
-			Draw_CharScaled(x * scale, y * scale, start[j], scale);
+			Draw_CharScaled(x * scale + offset_stereo, y * scale, start[j], scale);
 
 			if (!remaining--)
 			{
@@ -478,7 +486,7 @@ SCR_DrawCenterString(void)
 }
 
 void
-SCR_CheckDrawCenterString(void)
+SCR_CheckDrawCenterString(float separation)
 {
 	scr_centertime_off -= cls.rframetime;
 
@@ -487,7 +495,7 @@ SCR_CheckDrawCenterString(void)
 		return;
 	}
 
-	SCR_DrawCenterString();
+	SCR_DrawCenterString(separation);
 }
 
 /*
@@ -607,23 +615,25 @@ SCR_Init(void)
 }
 
 void
-SCR_DrawNet(void)
+SCR_DrawNet(float separation)
 {
 	float scale = SCR_GetMenuScale();
+	int offset_stereo = SCR_GetStereoHudOffset(separation);
 
 	if (cls.netchan.outgoing_sequence - cls.netchan.incoming_acknowledged < CMD_BACKUP - 1)
 	{
 		return;
 	}
 
-	Draw_PicScaled(scr_vrect.x + 64 * scale, scr_vrect.y, "net", scale);
+	Draw_PicScaled(scr_vrect.x + 64 * scale + offset_stereo, scr_vrect.y, "net", scale);
 }
 
 void
-SCR_DrawPause(void)
+SCR_DrawPause(float separation)
 {
 	int w, h;
 	float scale = SCR_GetMenuScale();
+	int offset_stereo = SCR_GetStereoHudOffset(separation);
 
 	if (!scr_showpause->value) /* turn off for screenshots */
 	{
@@ -636,7 +646,7 @@ SCR_DrawPause(void)
 	}
 
 	Draw_GetPicSize(&w, &h, "pause");
-	Draw_PicScaled((viddef.width - w * scale) / 2, viddef.height / 2 + 8 * scale, "pause", scale);
+	Draw_PicScaled((viddef.width - w * scale) / 2 + offset_stereo, viddef.height / 2 + 8 * scale, "pause", scale);
 }
 
 /*
@@ -688,9 +698,28 @@ SCR_UsingOpenXRStereo(void)
 	return (int)Cvar_VariableValue("gl1_stereo") == 8;
 }
 
+/*
+ * Per-eye horizontal HUD offset. depthScale lets an element be placed nearer to
+ * (depthScale < 1) or further from (depthScale > 1) the viewer than the rest of
+ * the HUD: only the depth-parallax term is scaled, while the FOV-centering term
+ * is left untouched so the element stays stereo-correct. depthScale == 1 gives
+ * the normal HUD depth.
+ */
 static int
-SCR_GetStereoHudOffset(float separation)
+SCR_GetStereoHudOffsetScaled(float separation, float depthScale)
 {
+	/* On the flat "screen layer" (menus, console, paused, demos, cinematics) the scene
+	 * is rendered once and shown to both eyes on a quad - a per-eye offset would just
+	 * push the HUD off-centre with no convergence benefit. This mirrors useScreenLayer()
+	 * in Q2VR_SurfaceView.c; keep the two in sync. */
+	if ((cls.state != ca_connected && cls.state != ca_active) ||
+		cls.key_dest != key_game ||
+		cl.attractloop ||
+		cl.cinematictime != 0)
+	{
+		return 0;
+	}
+
 	if (SCR_UsingOpenXRStereo())
 	{
 		int eye = separation < 0 ? 0 : 1;
@@ -715,8 +744,12 @@ SCR_GetStereoHudOffset(float separation)
 			{
 				hud_ipd = 0.064f;
 			}
+			if (depthScale <= 0.0f)
+			{
+				depthScale = 1.0f;
+			}
 
-			depth_offset = ((hud_ipd * 0.5f) / hud_depth) * (width / denom);
+			depth_offset = ((hud_ipd * 0.5f) / (hud_depth * depthScale)) * (width / denom);
 			offset += (eye == 0) ? depth_offset : -depth_offset;
 
 			return (int)(offset + (offset >= 0.0f ? 0.5f : -0.5f));
@@ -726,6 +759,12 @@ SCR_GetStereoHudOffset(float separation)
 	}
 
 	return (separation > 0) ? -25 : 25;
+}
+
+static int
+SCR_GetStereoHudOffset(float separation)
+{
+	return SCR_GetStereoHudOffsetScaled(separation, 1.0f);
 }
 
 void
@@ -780,12 +819,18 @@ SCR_DrawItemWheel (float separation)
                 int iconWidth = 12; // actually half of icon size. For centering purposes
                 if (i == segment && polarCursor[0] > 8)
                 { // if cursor is inside the segment corresponding to the item
-                    iconFactor = 2.5f;
+                    // Highlighted weapon: drawn a little larger and popped slightly towards
+                    // the user. The pop is done by scaling only the depth-parallax term of
+                    // the stereo offset (depthScale < 1 == nearer); scaling the whole offset
+                    // - as a previous *1.3f did - corrupts the FOV-centering term and makes
+                    // the icon stereo-incorrect.
+                    iconFactor = 3.0f;
+                    int offset_stereo_selected = SCR_GetStereoHudOffsetScaled(separation, 0.9f);
                     DrawStringScaled(vidwc + offset_stereo - (strlen(iconlist[i].command) * 4),
                                      vidhc - 100,
                                      iconlist[i].command, 1.0f); // Item name
                     sprintf(iconName, "/wheel/%s_selected.png", iconlist[i].name); // selected icon path
-                    Draw_PicScaled(vidwc + iconlist[i].x - (iconWidth * iconFactor) + (offset_stereo * 1.3f),
+                    Draw_PicScaled(vidwc + iconlist[i].x - (iconWidth * iconFactor) + offset_stereo_selected,
                                    vidhc + iconlist[i].y - (iconWidth * iconFactor), iconName,
                                    iconFactor);
                     if(iconlist[i].ammo) {
@@ -1947,8 +1992,8 @@ void SCR_UpdateForEye (int eye)
 
             SCR_DrawItemWheel(separation);
 
-			SCR_DrawNet();
-			SCR_CheckDrawCenterString();
+			SCR_DrawNet(separation);
+			SCR_CheckDrawCenterString(separation);
 
 			if (scr_timegraph->value)
 			{
@@ -1961,7 +2006,7 @@ void SCR_UpdateForEye (int eye)
 				SCR_DrawDebugGraph();
 			}
 
-			SCR_DrawPause();
+			SCR_DrawPause(separation);
 
 			SCR_DrawConsole(separation);
 
